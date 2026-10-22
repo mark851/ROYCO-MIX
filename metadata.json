@@ -1,0 +1,6 @@
+{
+  "name": "ROYCO MIX - Online Investment Platform",
+  "description": "Smart agricultural processing and equipment share investment platform in Uganda with daily UGX yields, instant mobile money deposits, and team commissions.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

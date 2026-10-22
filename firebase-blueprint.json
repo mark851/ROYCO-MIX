@@ -1,0 +1,146 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile containing balance, VIP level, referral stats and bank info",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Auth UID of the user", "maxLength": 128 },
+        "email": { "type": "string", "description": "Email address of the user", "maxLength": 256 },
+        "displayName": { "type": "string", "description": "Display name or phone number", "maxLength": 100 },
+        "phone": { "type": "string", "description": "Ugandan phone number (MTN / Airtel)", "maxLength": 20 },
+        "balanceUGX": { "type": "number", "description": "Available wallet balance in Ugandan Shillings" },
+        "totalInvestedUGX": { "type": "number", "description": "Cumulative amount invested in UGX" },
+        "totalEarnedUGX": { "type": "number", "description": "Cumulative returns earned in UGX" },
+        "totalWithdrawnUGX": { "type": "number", "description": "Total amount withdrawn in UGX" },
+        "referralCode": { "type": "string", "description": "Unique referral code for sharing", "maxLength": 32 },
+        "referredBy": { "type": "string", "description": "Referral code of inviter", "maxLength": 32 },
+        "momoNumber": { "type": "string", "description": "Saved MTN/Airtel mobile money payout number", "maxLength": 20 },
+        "momoProvider": { "type": "string", "description": "MTN Mobile Money or Airtel Money", "maxLength": 30 },
+        "role": { "type": "string", "description": "Role of user: member or admin", "enum": ["member", "admin"] },
+        "createdAt": { "type": "string", "description": "ISO timestamp of account creation", "maxLength": 64 },
+        "updatedAt": { "type": "string", "description": "ISO timestamp of last update", "maxLength": 64 }
+      },
+      "required": ["uid", "balanceUGX", "referralCode"]
+    },
+    "Investment": {
+      "title": "Investment",
+      "description": "Active or completed investment contract in Royco Mix processing lines",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique investment ID", "maxLength": 128 },
+        "userId": { "type": "string", "description": "UID of the investor", "maxLength": 128 },
+        "userEmail": { "type": "string", "description": "Email of investor", "maxLength": 256 },
+        "productId": { "type": "string", "description": "Product package identifier", "maxLength": 64 },
+        "productName": { "type": "string", "description": "Name of Royco Mix equipment or share", "maxLength": 120 },
+        "shareValueUGX": { "type": "number", "description": "Initial purchase capital in UGX" },
+        "dailyReturnUGX": { "type": "number", "description": "Daily profit yield credited in UGX" },
+        "totalReturnUGX": { "type": "number", "description": "Total expected return over the contract duration" },
+        "contractDays": { "type": "number", "description": "Contract duration in days" },
+        "daysElapsed": { "type": "number", "description": "Days since purchase" },
+        "claimedReturnUGX": { "type": "number", "description": "Total returns claimed so far" },
+        "lastClaimDate": { "type": "string", "description": "Date string of last claimed yield (YYYY-MM-DD)", "maxLength": 32 },
+        "status": { "type": "string", "description": "Contract status: active, completed", "enum": ["active", "completed"] },
+        "purchasedAt": { "type": "string", "description": "ISO timestamp when investment was started", "maxLength": 64 }
+      },
+      "required": ["userId", "productId", "shareValueUGX", "dailyReturnUGX", "status"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Financial ledger of recharges, withdrawals, yields, and referral bonuses",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique transaction ID", "maxLength": 128 },
+        "userId": { "type": "string", "description": "UID of user initiating transaction", "maxLength": 128 },
+        "userEmail": { "type": "string", "description": "User email", "maxLength": 256 },
+        "type": { "type": "string", "description": "Transaction category", "enum": ["deposit", "withdrawal", "investment", "daily_yield", "bonus", "commission"] },
+        "amountUGX": { "type": "number", "description": "Transaction amount in UGX" },
+        "feeUGX": { "type": "number", "description": "Platform or mobile network processing fee in UGX" },
+        "netAmountUGX": { "type": "number", "description": "Net amount after fees in UGX" },
+        "method": { "type": "string", "description": "Payment channel: MTN Mobile Money, Airtel Money, Internal Wallet", "maxLength": 64 },
+        "accountNumber": { "type": "string", "description": "Phone number or account receiving/sending money", "maxLength": 32 },
+        "status": { "type": "string", "description": "Transaction progress status", "enum": ["completed", "pending", "rejected"] },
+        "reference": { "type": "string", "description": "External mobile money or internal reference code", "maxLength": 64 },
+        "description": { "type": "string", "description": "Readable summary of transaction", "maxLength": 200 },
+        "createdAt": { "type": "string", "description": "ISO timestamp of transaction", "maxLength": 64 }
+      },
+      "required": ["userId", "type", "amountUGX", "status", "createdAt"]
+    },
+    "BonusClaim": {
+      "title": "BonusClaim",
+      "description": "Record of daily attendance check-in or referral reward claim",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Claim ID", "maxLength": 128 },
+        "userId": { "type": "string", "description": "UID of recipient", "maxLength": 128 },
+        "claimType": { "type": "string", "description": "daily_checkin, wheel_spin, invite_milestone", "maxLength": 64 },
+        "rewardUGX": { "type": "number", "description": "Reward credited to balance" },
+        "claimDate": { "type": "string", "description": "Date of claim (YYYY-MM-DD)", "maxLength": 32 },
+        "createdAt": { "type": "string", "description": "ISO timestamp", "maxLength": 64 }
+      },
+      "required": ["userId", "claimType", "rewardUGX", "claimDate"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Dynamic investment package configurable by admin",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Product ID", "maxLength": 128 },
+        "name": { "type": "string", "description": "Name of package", "maxLength": 120 },
+        "category": { "type": "string", "description": "Category name", "maxLength": 64 },
+        "tag": { "type": "string", "description": "Badge tag like Hot or VIP", "maxLength": 32 },
+        "shareValueUGX": { "type": "number", "description": "Share cost in UGX" },
+        "dailyReturnUGX": { "type": "number", "description": "Daily return in UGX" },
+        "contractDays": { "type": "number", "description": "Contract duration in days" },
+        "totalReturnUGX": { "type": "number", "description": "Total returns over contract" },
+        "limitPerUser": { "type": "number", "description": "Max purchase limit" },
+        "imageUrl": { "type": "string", "description": "Public image URL", "maxLength": 500 },
+        "description": { "type": "string", "description": "Product description", "maxLength": 300 }
+      },
+      "required": ["id", "name", "shareValueUGX", "dailyReturnUGX", "contractDays"]
+    },
+    "Setting": {
+      "title": "Setting",
+      "description": "Platform settings including Merchant IDs, USSD codes, support contacts and withdrawal links",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Settings key", "maxLength": 64 },
+        "merchantId": { "type": "string", "description": "Active Merchant ID", "maxLength": 64 },
+        "airtelUssd": { "type": "string", "description": "Airtel USSD dialing code", "maxLength": 32 },
+        "mtnUssd": { "type": "string", "description": "MTN MoMo USSD code", "maxLength": 32 },
+        "whatsappLink": { "type": "string", "description": "WhatsApp support URL or phone", "maxLength": 200 },
+        "telegramLink": { "type": "string", "description": "Telegram support channel or username", "maxLength": 200 },
+        "minWithdrawUGX": { "type": "number", "description": "Minimum withdrawal amount" },
+        "withdrawFeePercent": { "type": "number", "description": "Withdrawal processing fee percent" },
+        "updatedAt": { "type": "string", "description": "Last updated timestamp", "maxLength": 64 }
+      },
+      "required": ["id", "merchantId"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile with balance, phone, referral metrics"
+    },
+    "/investments/{investmentId}": {
+      "schema": "Investment",
+      "description": "Investment order record with daily yields and contract duration"
+    },
+    "/transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "Financial ledger record of deposits, withdrawals, yields, and bonuses"
+    },
+    "/bonusClaims/{claimId}": {
+      "schema": "BonusClaim",
+      "description": "Records of daily check-ins and task rewards claimed by users"
+    },
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "Dynamic investment package catalog"
+    },
+    "/settings/{settingId}": {
+      "schema": "Setting",
+      "description": "Platform operational configurations"
+    }
+  }
+}

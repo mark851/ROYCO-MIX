@@ -1,0 +1,162 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net: Default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Bootstrapped admin check using user email from runtime context or admin phone 0700524662
+    function isAdmin() {
+      return isSignedIn() && (
+        (request.auth.token.email == 'markniaras@gmail.com') ||
+        (request.auth.token.email.matches('.*700524662.*')) ||
+        (request.auth.token.email == 'admin@roycomix.ug') ||
+        ('phone_number' in request.auth.token && request.auth.token.phone_number.matches('.*700524662.*')) ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // Validation helper for User entity
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'balanceUGX', 'referralCode']) &&
+        data.keys().hasOnly(['uid', 'email', 'displayName', 'phone', 'balanceUGX', 'totalInvestedUGX', 'totalEarnedUGX', 'totalWithdrawnUGX', 'referralCode', 'referredBy', 'referredByUid', 'referralEarnedUGX', 'momoNumber', 'momoProvider', 'role', 'isBanned', 'banReason', 'bannedAt', 'createdAt', 'updatedAt']) &&
+        data.uid is string && data.uid.size() <= 128 &&
+        data.balanceUGX is number &&
+        data.referralCode is string && data.referralCode.size() <= 32 &&
+        (!('email' in data) || (data.email is string && data.email.size() <= 256)) &&
+        (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 100)) &&
+        (!('phone' in data) || (data.phone is string && data.phone.size() <= 20)) &&
+        (!('momoNumber' in data) || (data.momoNumber is string && data.momoNumber.size() <= 20)) &&
+        (!('momoProvider' in data) || (data.momoProvider is string && data.momoProvider.size() <= 30)) &&
+        (!('totalInvestedUGX' in data) || (data.totalInvestedUGX is number)) &&
+        (!('totalEarnedUGX' in data) || (data.totalEarnedUGX is number)) &&
+        (!('totalWithdrawnUGX' in data) || (data.totalWithdrawnUGX is number)) &&
+        (!('referralEarnedUGX' in data) || (data.referralEarnedUGX is number)) &&
+        (!('referredByUid' in data) || (data.referredByUid is string && data.referredByUid.size() <= 128)) &&
+        (!('isBanned' in data) || (data.isBanned is bool)) &&
+        (!('banReason' in data) || (data.banReason is string && data.banReason.size() <= 200)) &&
+        (!('bannedAt' in data) || (data.bannedAt is string && data.bannedAt.size() <= 64)) &&
+        (!('role' in data) || (data.role in ['member', 'admin']));
+    }
+
+    // Validation helper for Investment entity
+    function isValidInvestment(data) {
+      return data.keys().hasAll(['userId', 'productId', 'shareValueUGX', 'dailyReturnUGX', 'status']) &&
+        data.userId is string && data.userId.size() <= 128 &&
+        data.productId is string && data.productId.size() <= 64 &&
+        data.shareValueUGX is number && data.shareValueUGX > 0 &&
+        data.dailyReturnUGX is number && data.dailyReturnUGX >= 0 &&
+        data.status in ['active', 'completed'] &&
+        (!('productName' in data) || (data.productName is string && data.productName.size() <= 120)) &&
+        (!('totalReturnUGX' in data) || (data.totalReturnUGX is number && data.totalReturnUGX >= 0)) &&
+        (!('contractDays' in data) || (data.contractDays is number && data.contractDays > 0)) &&
+        (!('daysElapsed' in data) || (data.daysElapsed is number && data.daysElapsed >= 0)) &&
+        (!('claimedReturnUGX' in data) || (data.claimedReturnUGX is number && data.claimedReturnUGX >= 0)) &&
+        (!('lastClaimDate' in data) || (data.lastClaimDate is string && data.lastClaimDate.size() <= 32)) &&
+        (!('purchasedAt' in data) || (data.purchasedAt is string && data.purchasedAt.size() <= 64));
+    }
+
+    // Validation helper for Transaction entity
+    function isValidTransaction(data) {
+      return data.keys().hasAll(['userId', 'type', 'amountUGX', 'status', 'createdAt']) &&
+        data.userId is string && data.userId.size() <= 128 &&
+        data.type in ['deposit', 'withdrawal', 'investment', 'daily_yield', 'bonus', 'commission'] &&
+        data.amountUGX is number && data.amountUGX > 0 &&
+        data.status in ['completed', 'pending', 'rejected'] &&
+        data.createdAt is string && data.createdAt.size() <= 64 &&
+        (!('feeUGX' in data) || (data.feeUGX is number && data.feeUGX >= 0)) &&
+        (!('netAmountUGX' in data) || (data.netAmountUGX is number && data.netAmountUGX >= 0)) &&
+        (!('method' in data) || (data.method is string && data.method.size() <= 64)) &&
+        (!('accountNumber' in data) || (data.accountNumber is string && data.accountNumber.size() <= 32)) &&
+        (!('reference' in data) || (data.reference is string && data.reference.size() <= 64)) &&
+        (!('description' in data) || (data.description is string && data.description.size() <= 200));
+    }
+
+    // Validation helper for BonusClaim entity
+    function isValidBonusClaim(data) {
+      return data.keys().hasAll(['userId', 'claimType', 'rewardUGX', 'claimDate']) &&
+        data.userId is string && data.userId.size() <= 128 &&
+        data.claimType is string && data.claimType.size() <= 64 &&
+        data.rewardUGX is number && data.rewardUGX >= 0 &&
+        data.claimDate is string && data.claimDate.size() <= 32;
+    }
+
+    // Admin bootstrap collection
+    match /admins/{adminId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // User profiles collection
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(userId);
+      allow update: if isSignedIn() && isValidId(userId);
+      allow delete: if isAdmin();
+    }
+
+    // Investments collection
+    match /investments/{investmentId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(investmentId);
+      allow update: if isSignedIn() && isValidId(investmentId);
+      allow delete: if isAdmin();
+    }
+
+    // Transactions ledger collection
+    match /transactions/{transactionId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(transactionId);
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Bonus claims collection
+    match /bonusClaims/{claimId} {
+      allow get: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() &&
+        isValidId(claimId) &&
+        (incoming().userId == request.auth.uid || isAdmin()) &&
+        isValidBonusClaim(incoming());
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Dynamic Products catalog
+    match /products/{productId} {
+      allow read, write: if true;
+    }
+
+    // System configurations and gateways
+    match /settings/{settingId} {
+      allow read, write: if true;
+    }
+  }
+}
