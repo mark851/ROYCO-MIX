@@ -11,7 +11,7 @@ interface WithdrawModalProps {
 export const WithdrawModal: React.FC<WithdrawModalProps> = ({ isOpen, onClose }) => {
   const { profile, withdraw } = useAuth();
   const [method, setMethod] = useState<'MTN Mobile Money' | 'Airtel Money'>('MTN Mobile Money');
-  const [amount, setAmount] = useState<number>(10000);
+  const [amount, setAmount] = useState<number | ''>('');
   const [accountNumber, setAccountNumber] = useState<string>(profile?.momoNumber || profile?.phone || '');
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ success: boolean; message: string } | null>(null);
@@ -19,9 +19,10 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({ isOpen, onClose })
   if (!isOpen) return null;
 
   const currentBalance = profile?.balanceUGX ?? 0;
-  const fee = Math.round(amount * 0.05);
-  const netAmount = Math.max(0, amount - fee);
-  const hasEnough = currentBalance >= amount && amount >= 5000;
+  const numAmount = typeof amount === 'number' ? amount : Number(amount) || 0;
+  const fee = Math.round(numAmount * 0.05);
+  const netAmount = Math.max(0, numAmount - fee);
+  const hasEnough = currentBalance >= numAmount && numAmount >= 5000;
 
   const handleWithdrawSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,7 +31,7 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({ isOpen, onClose })
     setSubmitting(true);
     setFeedback(null);
     try {
-      const res = await withdraw(amount, method, accountNumber);
+      const res = await withdraw(numAmount, method, accountNumber);
       setFeedback(res);
       if (res.success) {
         confetti({
@@ -208,8 +209,12 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({ isOpen, onClose })
                   min="5000"
                   max={currentBalance}
                   step="1000"
-                  value={amount}
-                  onChange={(e) => setAmount(Number(e.target.value))}
+                  value={amount === '' || amount === 0 ? '' : amount}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setAmount(val === '' ? '' : Number(val));
+                  }}
+                  placeholder="Enter amount"
                   className="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-slate-900 font-extrabold text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
                   required
                 />

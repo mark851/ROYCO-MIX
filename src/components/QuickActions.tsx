@@ -1,5 +1,5 @@
 import React from 'react';
-import { Wallet, Landmark, MessageSquareText, ClipboardList, Award } from 'lucide-react';
+import { Wallet, Landmark, MessageSquareText, ClipboardList, Gift } from 'lucide-react';
 
 interface QuickActionsProps {
   onDepositClick: () => void;
@@ -65,16 +65,17 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
         <span className="text-[11px] font-semibold text-slate-700 tracking-tight">Order</span>
       </button>
 
-      {/* 5. Bonus Task */}
+      {/* 5. Gift Bonus */}
       <button
         onClick={onBonusClick}
         className="flex flex-col items-center justify-center p-1.5 rounded-xl hover:bg-slate-50 transition active:scale-95 group"
       >
         <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-rose-500 to-pink-600 shadow-md shadow-rose-500/20 flex items-center justify-center text-white mb-1.5 group-hover:scale-105 transition-transform">
-          <Award className="w-6 h-6 stroke-[2.2]" />
+          <Gift className="w-6 h-6 stroke-[2.2]" />
         </div>
-        <span className="text-[11px] font-semibold text-slate-700 tracking-tight">Bonus Task</span>
+        <span className="text-[11px] font-semibold text-slate-700 tracking-tight">Gift Bonus</span>
       </button>
     </div>
   );
 };
+

@@ -31,6 +31,7 @@ import {
   InvestmentProduct,
   BonusRecord,
   TeamMember,
+  GiftCode,
 } from '../types';
 
 interface AuthContextType {
@@ -56,10 +57,12 @@ interface AuthContextType {
   claimYield: (investmentId: string) => Promise<{ success: boolean; message: string }>;
   claimDailyCheckinBonus: () => Promise<{ success: boolean; reward: number; message: string }>;
   claimWheelBonus: (rewardAmount: number) => Promise<{ success: boolean; reward: number; message: string }>;
+  redeemGiftCode: (codeStr: string) => Promise<{ success: boolean; amount: number; message: string }>;
   updatePaymentMethod: (provider: string, number: string) => Promise<void>;
   isAdmin: boolean;
   verifyOwnerAdmin: (keyOrEmail: string) => Promise<{ success: boolean; message: string }>;
 }
+
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -1018,6 +1021,175 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const redeemGiftCode = async (
+    codeStr: string
+  ): Promise<{ success: boolean; amount: number; message: string }> => {
+    if (!user || !profile) {
+      return { success: false, amount: 0, message: 'Please sign in to redeem your gift code.' };
+    }
+    if (profile.isBanned) {
+      return {
+        success: false,
+        amount: 0,
+        message: 'Account Suspended: Cannot redeem vouchers while account is banned.',
+      };
+    }
+
+    const cleanCode = (codeStr || '').trim().toUpperCase();
+    if (!cleanCode) {
+      return { success: false, amount: 0, message: 'Please enter a valid gift code.' };
+    }
+
+    try {
+      // 1. Look up in giftCodes collection
+      let codeDocRef = doc(db, 'giftCodes', cleanCode);
+      let snap = await getDoc(codeDocRef);
+      let codeDocId = cleanCode;
+      let codeData: GiftCode | null = null;
+
+      if (snap.exists()) {
+        codeData = snap.data() as GiftCode;
+      } else {
+        const q = query(collection(db, 'giftCodes'), where('code', '==', cleanCode));
+        const qSnap = await getDocs(q);
+        if (!qSnap.empty) {
+          const first = qSnap.docs[0];
+          codeDocId = first.id;
+          codeData = first.data() as GiftCode;
+          codeDocRef = doc(db, 'giftCodes', codeDocId);
+        }
+      }
+
+      // If not yet in Firestore, seed standard welcome codes automatically
+      if (!codeData) {
+        if (cleanCode === 'ROYCO2026' || cleanCode === 'WELCOME5000') {
+          const seededCode: GiftCode = {
+            id: cleanCode,
+            code: cleanCode,
+            amountUGX: cleanCode === 'ROYCO2026' ? 5000 : 2500,
+            maxUses: 1000,
+            usedCount: 0,
+            usedByUserIds: [],
+            status: 'active',
+            note: 'Official Launch Welcome Gift Code',
+            createdAt: new Date().toISOString(),
+          };
+          await setDoc(codeDocRef, seededCode);
+          codeData = seededCode;
+        } else {
+          return {
+            success: false,
+            amount: 0,
+            message: `Gift code "${cleanCode}" is invalid or does not exist.`,
+          };
+        }
+      }
+
+      // 2. Validate status and usage
+      if (codeData.status !== 'active') {
+        return {
+          success: false,
+          amount: 0,
+          message: `This gift code is currently ${codeData.status}.`,
+        };
+      }
+
+      const usedUsers = Array.isArray(codeData.usedByUserIds) ? codeData.usedByUserIds : [];
+      if (usedUsers.includes(user.uid)) {
+        return {
+          success: false,
+          amount: 0,
+          message: `You have already redeemed gift code "${cleanCode}". Each user can only redeem once.`,
+        };
+      }
+
+      if (
+        typeof codeData.maxUses === 'number' &&
+        codeData.maxUses > 0 &&
+        (codeData.usedCount || 0) >= codeData.maxUses
+      ) {
+        return {
+          success: false,
+          amount: 0,
+          message: `Gift code "${cleanCode}" has reached its maximum redemption limit (${codeData.maxUses} users).`,
+        };
+      }
+
+      const rewardAmount = Number(codeData.amountUGX) || 0;
+      if (rewardAmount <= 0) {
+        return { success: false, amount: 0, message: 'Invalid gift code reward value.' };
+      }
+
+      const now = new Date().toISOString();
+      const today = now.slice(0, 10);
+      const newUsedCount = (codeData.usedCount || 0) + 1;
+      const newUsedList = [...usedUsers, user.uid];
+      const isNowExpired = codeData.maxUses > 0 && newUsedCount >= codeData.maxUses;
+
+      // 3. Update giftCode record
+      await updateDoc(codeDocRef, {
+        usedCount: newUsedCount,
+        usedByUserIds: newUsedList,
+        status: isNowExpired ? 'expired' : codeData.status,
+      });
+
+      // 4. Update user balance & earnings
+      const newBalance = (profile.balanceUGX || 0) + rewardAmount;
+      const newTotalEarned = (profile.totalEarnedUGX || 0) + rewardAmount;
+      await updateDoc(doc(db, 'users', user.uid), {
+        balanceUGX: newBalance,
+        totalEarnedUGX: newTotalEarned,
+        updatedAt: now,
+      });
+
+      // 5. Record FinancialTransaction
+      const txId = 'tx_gift_' + Date.now();
+      const txDoc: FinancialTransaction = {
+        id: txId,
+        userId: user.uid,
+        userEmail: user.email || 'user@roycomix.ug',
+        userPhone: profile.phone || '',
+        userName: profile.displayName || 'Royco Investor',
+        type: 'bonus',
+        amountUGX: rewardAmount,
+        feeUGX: 0,
+        netAmountUGX: rewardAmount,
+        method: 'Gift Code Voucher',
+        status: 'completed',
+        reference: `GIFT-${cleanCode}`,
+        description: `Gift Code (${cleanCode}) redeemed: +UGX ${rewardAmount.toLocaleString()}`,
+        createdAt: now,
+      };
+      await setDoc(doc(db, 'transactions', txId), txDoc);
+
+      // 6. Record BonusClaim
+      const claimId = 'bonus_gift_' + Date.now();
+      const claimDoc: BonusRecord = {
+        id: claimId,
+        userId: user.uid,
+        claimType: 'gift_code',
+        rewardUGX: rewardAmount,
+        claimDate: today,
+        createdAt: now,
+        code: cleanCode,
+      };
+      await setDoc(doc(db, 'bonusClaims', claimId), claimDoc);
+
+      return {
+        success: true,
+        amount: rewardAmount,
+        message: `Success! UGX ${rewardAmount.toLocaleString()} has been credited to your balance!`,
+      };
+    } catch (err) {
+      console.error('Error redeeming gift code:', err);
+      return {
+        success: false,
+        amount: 0,
+        message: 'Could not redeem gift code. Please check your connection and try again.',
+      };
+    }
+  };
+
   const updatePaymentMethod = async (provider: string, number: string) => {
     if (!user || !profile) return;
     const now = new Date().toISOString();
@@ -1110,11 +1282,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       claimYield,
       claimDailyCheckinBonus,
       claimWheelBonus,
+      redeemGiftCode,
       updatePaymentMethod,
       isAdmin,
       verifyOwnerAdmin,
     }),
     [user, profile, loading, activeInvestments, transactions, bonusClaims, teamMembers, isAdmin]
+
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -227,9 +227,9 @@ function MainApp() {
                 <span className="text-[10px] font-black uppercase tracking-wider text-rose-200">
                   Rewards Hub
                 </span>
-                <h2 className="text-xl font-black">Daily Cash Rewards</h2>
+                <h2 className="text-xl font-black">Daily Cash & Gift Codes</h2>
                 <p className="text-xs text-rose-100">
-                  Claim your attendance checks and spin the lucky prize wheel for instant UGX bonuses!
+                  Claim your daily attendance bonus and redeem official gift vouchers for instant UGX bonuses!
                 </p>
               </div>
 
@@ -238,10 +238,10 @@ function MainApp() {
                   if (!user) setAuthOpen(true);
                   else setBonusOpen(true);
                 }}
-                className="w-full py-4 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 text-white font-black text-sm shadow-md shadow-amber-500/25 flex items-center justify-center gap-2 hover:brightness-105 active:scale-95 transition"
+                className="w-full py-4 rounded-2xl bg-gradient-to-r from-pink-600 to-rose-600 text-white font-black text-sm shadow-md shadow-pink-600/25 flex items-center justify-center gap-2 hover:brightness-105 active:scale-95 transition"
               >
                 <Sparkles className="w-5 h-5" />
-                <span>Open Bonus Task Center (Check-in & Wheel)</span>
+                <span>Open Bonus Task Center (Check-in & Gift Code)</span>
               </button>
             </div>
           </main>
@@ -269,6 +269,10 @@ function MainApp() {
               onOrderClick={() => {
                 if (!user) setAuthOpen(true);
                 else setOrdersOpen(true);
+              }}
+              onBonusClick={() => {
+                if (!user) setAuthOpen(true);
+                else setBonusOpen(true);
               }}
               onSupportClick={() => setSupportOpen(true)}
               onAuthModalClick={() => setAuthOpen(true)}

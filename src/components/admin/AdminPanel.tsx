@@ -15,6 +15,7 @@ import {
   InvestmentOrder,
   FinancialTransaction,
   InvestmentProduct,
+  GiftCode,
 } from '../../types';
 import { useProducts } from '../../context/ProductsContext';
 import {
@@ -54,6 +55,8 @@ import {
   Clock,
   Ban,
   ShieldAlert,
+  Gift,
+  Ticket,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { ImageUploadManager } from './ImageUploadManager';
@@ -70,11 +73,13 @@ type AdminTab =
   | 'deposits'
   | 'withdrawals'
   | 'manage_users'
+  | 'gift_codes'
   | 'plan_manage'
   | 'banners_media'
   | 'payment_gateways'
   | 'support'
   | 'settings';
+
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
   const { user, profile, isAdmin } = useAuth();
@@ -89,6 +94,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
   const [userSearchQuery, setUserSearchQuery] = useState('');
   const [withdrawalFilter, setWithdrawalFilter] = useState<'pending' | 'all' | 'completed' | 'rejected'>('pending');
   const [copiedAcc, setCopiedAcc] = useState<string | null>(null);
+  const [userFilter, setUserFilter] = useState<'all' | 'active' | 'banned'>('all');
+  const [banPromptUser, setBanPromptUser] = useState<UserProfile | null>(null);
+  const [banReasonText, setBanReasonText] = useState('Violation of platform policy');
+
+  // Gift Codes management state
+  const [allGiftCodes, setAllGiftCodes] = useState<GiftCode[]>([]);
+  const [giftSearchQuery, setGiftSearchQuery] = useState('');
+  const [giftFilter, setGiftFilter] = useState<'all' | 'active' | 'disabled' | 'expired'>('all');
+  const [isNewGiftModalOpen, setIsNewGiftModalOpen] = useState(false);
+  const [giftCodeToDelete, setGiftCodeToDelete] = useState<GiftCode | null>(null);
+  const [viewingGiftUsers, setViewingGiftUsers] = useState<GiftCode | null>(null);
+  const [copiedGiftCode, setCopiedGiftCode] = useState<string | null>(null);
+
+  // Form state for creating a new gift code
+  const [newGiftCode, setNewGiftCode] = useState('');
+  const [newGiftAmount, setNewGiftAmount] = useState<number | ''>('');
+  const [newGiftMaxUses, setNewGiftMaxUses] = useState<number | ''>(50);
+  const [newGiftNote, setNewGiftNote] = useState('');
+  const [isSubmittingGift, setIsSubmittingGift] = useState(false);
 
   // Settings State initialized from dynamic settings
   const [paymentLink, setPaymentLink] = useState(
@@ -112,7 +136,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
 
   // Modals inside Admin
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
-  const [balanceDelta, setBalanceDelta] = useState<string>('0');
+  const [balanceDelta, setBalanceDelta] = useState<string>('');
   const [balanceMode, setBalanceMode] = useState<'add' | 'subtract' | 'set'>('add');
 
   const [editingProduct, setEditingProduct] = useState<InvestmentProduct | null>(null);
@@ -140,7 +164,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
     return () => clearInterval(timer);
   }, []);
 
-  // 1. Listen for all users
+  // 1. Listen for all users, transactions, investments & gift codes
   useEffect(() => {
     if (!isOpen) return;
 
@@ -178,10 +202,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
       }
     );
 
+    const unsubGift = onSnapshot(
+      collection(db, 'giftCodes'),
+      (snapshot) => {
+        const codes = snapshot.docs.map((docSnap) => docSnap.data() as GiftCode);
+        codes.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        setAllGiftCodes(codes);
+      },
+      (err) => {
+        console.warn('Admin gift codes fetch note:', err);
+      }
+    );
+
     return () => {
       unsubUsers();
       unsubTx();
       unsubInv();
+      unsubGift();
     };
   }, [isOpen]);
 
@@ -347,10 +384,72 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
       await setDoc(doc(db, 'transactions', adjTxId), adjTx);
 
       setEditingUser(null);
-      setBalanceDelta('0');
+      setBalanceDelta('');
       showNotification('success', `Updated user balance to UGX ${newBalance.toLocaleString()}`);
     } catch (err) {
       showNotification('error', 'Failed to update user balance');
+    }
+  };
+
+  // 4. Ban and Unban User Accounts
+  const handleBanUser = async (target: UserProfile, reason?: string) => {
+    try {
+      const now = new Date().toISOString();
+      const banReason = reason || banReasonText || 'Violation of platform policy';
+
+      await updateDoc(doc(db, 'users', target.uid), {
+        isBanned: true,
+        banReason,
+        bannedAt: now,
+        updatedAt: now,
+      });
+
+      setAllUsers((prev) =>
+        prev.map((u) =>
+          u.uid === target.uid
+            ? { ...u, isBanned: true, banReason, bannedAt: now, updatedAt: now }
+            : u
+        )
+      );
+
+      if (editingUser?.uid === target.uid) {
+        setEditingUser((prev) => (prev ? { ...prev, isBanned: true, banReason, bannedAt: now } : null));
+      }
+
+      setBanPromptUser(null);
+      showNotification('success', `User account ${target.phone || target.displayName || target.uid} is now BANNED.`);
+    } catch (err) {
+      showNotification('error', 'Failed to ban user account');
+    }
+  };
+
+  const handleUnbanUser = async (target: UserProfile) => {
+    try {
+      const now = new Date().toISOString();
+
+      await updateDoc(doc(db, 'users', target.uid), {
+        isBanned: false,
+        banReason: '',
+        bannedAt: '',
+        updatedAt: now,
+      });
+
+      setAllUsers((prev) =>
+        prev.map((u) =>
+          u.uid === target.uid
+            ? { ...u, isBanned: false, banReason: '', bannedAt: undefined, updatedAt: now }
+            : u
+        )
+      );
+
+      if (editingUser?.uid === target.uid) {
+        setEditingUser((prev) => (prev ? { ...prev, isBanned: false, banReason: '' } : null));
+      }
+
+      confetti({ particleCount: 40, spread: 50 });
+      showNotification('success', `User account ${target.phone || target.displayName || target.uid} has been UNBANNED.`);
+    } catch (err) {
+      showNotification('error', 'Failed to unban user account');
     }
   };
 
@@ -499,6 +598,127 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
     setQuickImageProduct(null);
   };
 
+  // Gift Codes Management Handlers
+  const handleCopyGiftCode = (code: string) => {
+    navigator.clipboard.writeText(code);
+    setCopiedGiftCode(code);
+    setTimeout(() => setCopiedGiftCode(null), 2000);
+  };
+
+  const handleGenerateRandomCode = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let rand = '';
+    for (let i = 0; i < 4; i++) {
+      rand += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    setNewGiftCode(`ROYCO-${rand}`);
+  };
+
+  const handleCreateGiftCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const clean = newGiftCode.trim().toUpperCase();
+    const numAmount = typeof newGiftAmount === 'number' ? newGiftAmount : Number(newGiftAmount) || 0;
+    const numMaxUses = typeof newGiftMaxUses === 'number' ? newGiftMaxUses : Number(newGiftMaxUses) || 1;
+
+    if (!clean) {
+      showNotification('error', 'Please enter a code name or click generate.');
+      return;
+    }
+    if (numAmount <= 0) {
+      showNotification('error', 'Please enter a valid reward amount in UGX.');
+      return;
+    }
+
+    setIsSubmittingGift(true);
+    try {
+      const now = new Date().toISOString();
+      const codeItem: GiftCode = {
+        id: clean,
+        code: clean,
+        amountUGX: numAmount,
+        maxUses: numMaxUses,
+        usedCount: 0,
+        usedByUserIds: [],
+        status: 'active',
+        note: newGiftNote.trim() || undefined,
+        createdAt: now,
+        createdBy: user?.email || 'Admin',
+      };
+
+      await setDoc(doc(db, 'giftCodes', clean), codeItem);
+      showNotification('success', `Gift Code "${clean}" created for UGX ${numAmount.toLocaleString()}!`);
+      setIsNewGiftModalOpen(false);
+      setNewGiftCode('');
+      setNewGiftAmount('');
+      setNewGiftMaxUses(50);
+      setNewGiftNote('');
+    } catch (err) {
+      console.error(err);
+      showNotification('error', 'Failed to create gift code in Firestore.');
+    } finally {
+      setIsSubmittingGift(false);
+    }
+  };
+
+  const handleToggleGiftStatus = async (item: GiftCode) => {
+    const nextStatus = item.status === 'active' ? 'disabled' : 'active';
+    try {
+      await updateDoc(doc(db, 'giftCodes', item.id || item.code), {
+        status: nextStatus,
+      });
+      showNotification('success', `Gift code ${item.code} is now ${nextStatus}.`);
+    } catch {
+      showNotification('error', 'Failed to update code status.');
+    }
+  };
+
+  const handleDeleteGiftCode = async (item: GiftCode) => {
+    try {
+      await deleteDoc(doc(db, 'giftCodes', item.id || item.code));
+      showNotification('success', `Gift code ${item.code} deleted permanently.`);
+      setGiftCodeToDelete(null);
+    } catch {
+      showNotification('error', 'Failed to delete gift code.');
+    }
+  };
+
+  const handleSeedInitialCodes = async () => {
+    try {
+      const initial: GiftCode[] = [
+        {
+          id: 'ROYCO2026',
+          code: 'ROYCO2026',
+          amountUGX: 5000,
+          maxUses: 500,
+          usedCount: 0,
+          usedByUserIds: [],
+          status: 'active',
+          note: 'Official Launch Bonus Voucher',
+          createdAt: new Date().toISOString(),
+          createdBy: 'Admin',
+        },
+        {
+          id: 'ROYCOVIP',
+          code: 'ROYCOVIP',
+          amountUGX: 10000,
+          maxUses: 100,
+          usedCount: 0,
+          usedByUserIds: [],
+          status: 'active',
+          note: 'VIP Special Investor Reward',
+          createdAt: new Date().toISOString(),
+          createdBy: 'Admin',
+        },
+      ];
+      for (const item of initial) {
+        await setDoc(doc(db, 'giftCodes', item.code), item);
+      }
+      showNotification('success', 'Default gift codes seeded in Firestore!');
+    } catch (e) {
+      showNotification('error', 'Could not seed gift codes');
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-0 md:p-3 overflow-hidden animate-in fade-in duration-200">
       <div className="bg-[#0b1728] w-full max-w-4xl h-full md:h-[94vh] rounded-none md:rounded-3xl flex flex-col md:flex-row overflow-hidden shadow-2xl border border-slate-700/60 text-slate-100 relative">
@@ -636,6 +856,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
               </div>
               {sidebarOpen && (
                 <span className="text-[10px] text-blue-200">{allUsers.length}</span>
+              )}
+            </button>
+
+            {/* 5b. Gift Codes (Vouchers & Reward Codes) */}
+            <button
+              onClick={() => setCurrentTab('gift_codes')}
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition ${
+                currentTab === 'gift_codes'
+                  ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold'
+                  : 'text-blue-100 hover:bg-white/10'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Gift className="w-4 h-4 shrink-0 text-pink-300" />
+                {sidebarOpen && <span>Gift Codes</span>}
+              </div>
+              {sidebarOpen && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-pink-500/20 text-pink-300 font-bold border border-pink-500/30">
+                  {allGiftCodes.length}
+                </span>
               )}
             </button>
 
@@ -1241,69 +1481,536 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
             {/* -------------------------------------------------------------
                 TAB 4: MANAGE USERS & EDITING THEIR MONEY ON DASHBOARD
                ------------------------------------------------------------- */}
-            {currentTab === 'manage_users' && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-lg font-black text-white">User Accounts & Wallet Manager</h3>
-                    <p className="text-xs text-slate-400">
-                      Monitor user balances and adjust funds directly in Firestore
-                    </p>
+            {currentTab === 'manage_users' && (() => {
+              const activeUsersCount = allUsers.filter((u) => !u.isBanned).length;
+              const bannedUsersCount = allUsers.filter((u) => u.isBanned).length;
+
+              const filteredUsers = allUsers.filter((u) => {
+                if (userFilter === 'banned' && !u.isBanned) return false;
+                if (userFilter === 'active' && u.isBanned) return false;
+                if (!userSearchQuery.trim()) return true;
+                const q = userSearchQuery.toLowerCase();
+                return (
+                  (u.phone && u.phone.toLowerCase().includes(q)) ||
+                  (u.displayName && u.displayName.toLowerCase().includes(q)) ||
+                  (u.referralCode && u.referralCode.toLowerCase().includes(q)) ||
+                  (u.momoNumber && u.momoNumber.toLowerCase().includes(q)) ||
+                  (u.uid && u.uid.toLowerCase().includes(q))
+                );
+              });
+
+              return (
+                <div className="space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#152a48] border border-slate-700/80 rounded-2xl p-4">
+                    <div>
+                      <h3 className="text-lg font-black text-white flex items-center gap-2">
+                        <Users className="w-5 h-5 text-indigo-400" />
+                        User Accounts & Access Control
+                      </h3>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Manage user wallet balances and ban or unban accounts in real time.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="px-3 py-1.5 rounded-xl text-xs font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                        {allUsers.length} Users Total
+                      </span>
+                      {bannedUsersCount > 0 && (
+                        <span className="px-3 py-1.5 rounded-xl text-xs font-black bg-rose-500/20 text-rose-300 border border-rose-500/40">
+                          {bannedUsersCount} Banned
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <span className="text-xs font-bold text-blue-300">{allUsers.length} Users Registered</span>
-                </div>
 
-                <div className="space-y-3">
-                  {allUsers.map((u) => (
-                    <div
-                      key={u.uid}
-                      className="bg-[#152a48] border border-slate-700/80 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-3"
-                    >
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-black text-white text-sm">{u.displayName || 'Investor'}</span>
-                          <span className="text-xs font-mono text-blue-300">({u.phone || 'No phone'})</span>
-                          <span className="px-2 py-0.2 rounded text-[10px] font-bold bg-amber-400/20 text-amber-300">
-                            {u.role}
-                          </span>
-                        </div>
-                        <div className="text-xs text-slate-400">
-                          MoMo Number: <span className="font-mono text-slate-300">{u.momoNumber || u.phone}</span> ({u.momoProvider})
-                        </div>
-                        <div className="text-[10px] text-slate-500">
-                          UID: {u.uid} • Ref Code: <strong className="text-amber-400">{u.referralCode}</strong>
-                        </div>
-                      </div>
+                  {/* Filter and Search Bar */}
+                  <div className="flex flex-col sm:flex-row gap-2.5 justify-between">
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setUserFilter('all')}
+                        className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
+                          userFilter === 'all'
+                            ? 'bg-indigo-600 text-white font-black shadow-md shadow-indigo-600/20'
+                            : 'bg-[#152a48] text-slate-300 hover:bg-[#1a3356]'
+                        }`}
+                      >
+                        All ({allUsers.length})
+                      </button>
+                      <button
+                        onClick={() => setUserFilter('active')}
+                        className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 ${
+                          userFilter === 'active'
+                            ? 'bg-emerald-600 text-white font-black shadow-md shadow-emerald-600/20'
+                            : 'bg-[#152a48] text-slate-300 hover:bg-[#1a3356]'
+                        }`}
+                      >
+                        Active ({activeUsersCount})
+                      </button>
+                      <button
+                        onClick={() => setUserFilter('banned')}
+                        className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 ${
+                          userFilter === 'banned'
+                            ? 'bg-rose-600 text-white font-black shadow-md shadow-rose-600/20'
+                            : 'bg-[#152a48] text-slate-300 hover:bg-[#1a3356]'
+                        }`}
+                      >
+                        <Ban className="w-3.5 h-3.5" />
+                        Banned ({bannedUsersCount})
+                      </button>
+                    </div>
 
-                      <div className="flex items-center gap-4">
-                        <div className="text-right">
-                          <span className="text-[10px] text-slate-400">Wallet Balance</span>
-                          <div className="text-lg font-black text-emerald-400">
-                            UGX {(u.balanceUGX || 0).toLocaleString()}
-                          </div>
-                          <div className="text-[10px] text-slate-400">
-                            Invested: UGX {(u.totalInvestedUGX || 0).toLocaleString()}
-                          </div>
-                        </div>
+                    <div className="relative flex-1 sm:max-w-xs">
+                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={userSearchQuery}
+                        onChange={(e) => setUserSearchQuery(e.target.value)}
+                        placeholder="Search phone, name, UID..."
+                        className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-[#152a48] border border-slate-700/80 text-white text-xs font-medium placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                  </div>
 
-                        {/* Edit Money Button */}
-                        <button
-                          onClick={() => {
-                            setEditingUser(u);
-                            setBalanceDelta('0');
-                            setBalanceMode('add');
-                          }}
-                          className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-amber-950 font-black text-xs transition active:scale-95 shadow-md flex items-center gap-1.5"
+                  {filteredUsers.length === 0 ? (
+                    <div className="p-12 text-center text-slate-400 bg-[#152a48] rounded-2xl border border-slate-700/60">
+                      No matching user accounts found.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {filteredUsers.map((u) => (
+                        <div
+                          key={u.uid}
+                          className={`border rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-3.5 transition ${
+                            u.isBanned
+                              ? 'bg-[#1c1829] border-rose-500/40 shadow-sm'
+                              : 'bg-[#152a48] border-slate-700/80'
+                          }`}
                         >
-                          <DollarSign className="w-3.5 h-3.5" />
-                          <span>Edit Money</span>
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-black text-white text-sm">{u.displayName || 'Investor'}</span>
+                              <span className="text-xs font-mono text-blue-300">({u.phone || 'No phone'})</span>
+                              <span className="px-2 py-0.2 rounded text-[10px] font-bold bg-amber-400/20 text-amber-300">
+                                {u.role}
+                              </span>
+                              {u.isBanned ? (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-500/20 text-rose-300 border border-rose-500/40 animate-pulse flex items-center gap-1">
+                                  <Ban className="w-3 h-3" /> BANNED
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                  ✓ Active
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-slate-400">
+                              MoMo: <span className="font-mono text-slate-300">{u.momoNumber || u.phone || 'Not set'}</span> ({u.momoProvider || 'MTN MoMo'})
+                            </div>
+                            <div className="text-[10px] text-slate-500">
+                              UID: {u.uid} • Ref Code: <strong className="text-amber-400">{u.referralCode}</strong>
+                            </div>
+                            {u.isBanned && (
+                              <div className="text-xs text-rose-300 bg-rose-950/40 px-2.5 py-1 rounded-lg border border-rose-800/40 inline-block">
+                                Reason: <strong>{u.banReason || 'Policy Violation'}</strong>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-3 flex-wrap sm:flex-nowrap">
+                            <div className="text-right">
+                              <span className="text-[10px] text-slate-400">Wallet Balance</span>
+                              <div className="text-lg font-black text-emerald-400">
+                                UGX {(u.balanceUGX || 0).toLocaleString()}
+                              </div>
+                              <div className="text-[10px] text-slate-400">
+                                Invested: UGX {(u.totalInvestedUGX || 0).toLocaleString()}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              {/* Ban / Unban Button */}
+                              {u.isBanned ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleUnbanUser(u)}
+                                  className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition active:scale-95 shadow-md flex items-center gap-1.5"
+                                  title="Restore user account to active status"
+                                >
+                                  <ShieldCheck className="w-3.5 h-3.5 stroke-[2.5]" />
+                                  <span>Unban</span>
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setBanPromptUser(u);
+                                    setBanReasonText('Violation of platform policy');
+                                  }}
+                                  className="px-3.5 py-2 rounded-xl bg-rose-600/30 hover:bg-rose-600 text-rose-200 hover:text-white font-bold text-xs border border-rose-500/40 transition active:scale-95 flex items-center gap-1.5"
+                                  title="Suspend user account"
+                                >
+                                  <Ban className="w-3.5 h-3.5" />
+                                  <span>Ban</span>
+                                </button>
+                              )}
+
+                              {/* Edit Money Button */}
+                              <button
+                                onClick={() => {
+                                  setEditingUser(u);
+                                  setBalanceDelta('');
+                                  setBalanceMode('add');
+                                }}
+                                className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-amber-950 font-black text-xs transition active:scale-95 shadow-md flex items-center gap-1.5"
+                              >
+                                <DollarSign className="w-3.5 h-3.5" />
+                                <span>Edit Money</span>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* -------------------------------------------------------------
+                TAB 5b: GIFT CODES (Vouchers & Reward Codes)
+               ------------------------------------------------------------- */}
+            {currentTab === 'gift_codes' && (() => {
+              const activeCount = allGiftCodes.filter((g) => g.status === 'active').length;
+              const disabledCount = allGiftCodes.filter((g) => g.status === 'disabled').length;
+              const expiredCount = allGiftCodes.filter((g) => g.status === 'expired').length;
+
+              const totalRedeemedCount = allGiftCodes.reduce((sum, g) => sum + (g.usedCount || 0), 0);
+              const totalAmountPaidOut = allGiftCodes.reduce(
+                (sum, g) => sum + (g.usedCount || 0) * (g.amountUGX || 0),
+                0
+              );
+
+              const filteredCodes = allGiftCodes.filter((item) => {
+                if (giftFilter !== 'all' && item.status !== giftFilter) return false;
+                if (!giftSearchQuery.trim()) return true;
+                const q = giftSearchQuery.toLowerCase();
+                return (
+                  item.code.toLowerCase().includes(q) ||
+                  (item.note && item.note.toLowerCase().includes(q))
+                );
+              });
+
+              return (
+                <div className="space-y-4">
+                  {/* Top Bar with Title & Create Button */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-lg font-black text-white flex items-center gap-2">
+                          <Gift className="w-5 h-5 text-pink-400" />
+                          <span>Gift Codes & Vouchers</span>
+                        </h3>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-pink-500/20 text-pink-300 border border-pink-500/30">
+                          {allGiftCodes.length} Codes
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400">
+                        Create instant cash voucher codes for users with custom reward amounts and limits
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {allGiftCodes.length === 0 && (
+                        <button
+                          type="button"
+                          onClick={handleSeedInitialCodes}
+                          className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs flex items-center gap-1.5 transition active:scale-95 border border-slate-700"
+                        >
+                          <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                          <span>Seed Sample Codes</span>
                         </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNewGiftCode('');
+                          setNewGiftAmount('');
+                          setNewGiftMaxUses(50);
+                          setNewGiftNote('');
+                          setIsNewGiftModalOpen(true);
+                        }}
+                        className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-pink-600 to-rose-600 hover:brightness-110 text-white font-black text-xs flex items-center gap-1.5 transition active:scale-95 shadow-md shadow-pink-600/25"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>Create New Gift Code</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Summary Metric Cards */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="bg-[#152a48] border border-slate-700/80 rounded-2xl p-3 space-y-1">
+                      <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wider">
+                        Total Codes
+                      </span>
+                      <div className="text-xl font-black text-white">{allGiftCodes.length}</div>
+                      <span className="text-[10px] text-pink-300">
+                        {activeCount} active in catalog
+                      </span>
+                    </div>
+
+                    <div className="bg-[#152a48] border border-slate-700/80 rounded-2xl p-3 space-y-1">
+                      <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wider">
+                        Total Distributed
+                      </span>
+                      <div className="text-xl font-black text-emerald-400">
+                        UGX {totalAmountPaidOut.toLocaleString()}
+                      </div>
+                      <span className="text-[10px] text-slate-400">Total credited to wallets</span>
+                    </div>
+
+                    <div className="bg-[#152a48] border border-slate-700/80 rounded-2xl p-3 space-y-1">
+                      <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wider">
+                        Times Redeemed
+                      </span>
+                      <div className="text-xl font-black text-amber-400">
+                        {totalRedeemedCount}
+                      </div>
+                      <span className="text-[10px] text-slate-400">Successful user claims</span>
+                    </div>
+
+                    <div className="bg-[#152a48] border border-slate-700/80 rounded-2xl p-3 space-y-1">
+                      <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wider">
+                        Status Breakdown
+                      </span>
+                      <div className="text-xs font-bold space-y-0.5 text-slate-300 pt-0.5">
+                        <div className="text-emerald-400">✓ {activeCount} Active</div>
+                        <div className="text-rose-400">✕ {disabledCount} Paused</div>
+                        <div className="text-slate-400">⏳ {expiredCount} Expired</div>
                       </div>
                     </div>
-                  ))}
+                  </div>
+
+                  {/* Search and Filters */}
+                  <div className="flex flex-col sm:flex-row gap-2.5 justify-between">
+                    <div className="flex gap-2 flex-wrap">
+                      <button
+                        onClick={() => setGiftFilter('all')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+                          giftFilter === 'all'
+                            ? 'bg-pink-600 text-white font-black shadow-md shadow-pink-600/20'
+                            : 'bg-[#152a48] text-slate-300 hover:bg-[#1a3356]'
+                        }`}
+                      >
+                        All ({allGiftCodes.length})
+                      </button>
+                      <button
+                        onClick={() => setGiftFilter('active')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+                          giftFilter === 'active'
+                            ? 'bg-emerald-600 text-white font-black shadow-md shadow-emerald-600/20'
+                            : 'bg-[#152a48] text-slate-300 hover:bg-[#1a3356]'
+                        }`}
+                      >
+                        Active ({activeCount})
+                      </button>
+                      <button
+                        onClick={() => setGiftFilter('disabled')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+                          giftFilter === 'disabled'
+                            ? 'bg-rose-600 text-white font-black shadow-md shadow-rose-600/20'
+                            : 'bg-[#152a48] text-slate-300 hover:bg-[#1a3356]'
+                        }`}
+                      >
+                        Disabled ({disabledCount})
+                      </button>
+                      <button
+                        onClick={() => setGiftFilter('expired')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+                          giftFilter === 'expired'
+                            ? 'bg-slate-700 text-white font-black'
+                            : 'bg-[#152a48] text-slate-300 hover:bg-[#1a3356]'
+                        }`}
+                      >
+                        Expired ({expiredCount})
+                      </button>
+                    </div>
+
+                    <div className="relative flex-1 sm:max-w-xs">
+                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={giftSearchQuery}
+                        onChange={(e) => setGiftSearchQuery(e.target.value)}
+                        placeholder="Search gift codes or notes..."
+                        className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-[#152a48] border border-slate-700/80 text-white text-xs font-medium placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-pink-500"
+                      />
+                    </div>
+                  </div>
+
+                  {/* List / Cards */}
+                  {filteredCodes.length === 0 ? (
+                    <div className="p-12 text-center text-slate-400 bg-[#152a48] rounded-2xl border border-slate-700/60 space-y-3">
+                      <Gift className="w-10 h-10 mx-auto text-slate-600" />
+                      <div>
+                        <div className="font-bold text-white text-sm">No Gift Codes Found</div>
+                        <p className="text-xs text-slate-400 mt-1">
+                          Create a gift code above to give users custom cash rewards when they redeem in the Bonus Task Center.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNewGiftCode('');
+                          setNewGiftAmount('');
+                          setNewGiftMaxUses(50);
+                          setNewGiftNote('');
+                          setIsNewGiftModalOpen(true);
+                        }}
+                        className="px-4 py-2 rounded-xl bg-pink-600 text-white font-bold text-xs hover:bg-pink-500 transition"
+                      >
+                        + Create First Gift Code
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                      {filteredCodes.map((item) => {
+                        const pctUsed = item.maxUses && item.maxUses > 0
+                          ? Math.min(100, Math.round(((item.usedCount || 0) / item.maxUses) * 100))
+                          : 0;
+
+                        return (
+                          <div
+                            key={item.id || item.code}
+                            className={`border rounded-2xl p-4 flex flex-col justify-between gap-3 transition shadow-sm ${
+                              item.status === 'active'
+                                ? 'bg-[#152a48] border-pink-500/30'
+                                : item.status === 'disabled'
+                                ? 'bg-[#1a1c29] border-rose-500/30'
+                                : 'bg-[#141d2c] border-slate-700/60 opacity-80'
+                            }`}
+                          >
+                            <div className="space-y-2.5">
+                              {/* Header: Code & Status */}
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-mono font-black text-base text-pink-300 tracking-wider bg-pink-950/60 px-2.5 py-1 rounded-xl border border-pink-500/30">
+                                    {item.code}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCopyGiftCode(item.code)}
+                                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition active:scale-90"
+                                    title="Copy Gift Code"
+                                  >
+                                    {copiedGiftCode === item.code ? (
+                                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                                    ) : (
+                                      <Copy className="w-3.5 h-3.5" />
+                                    )}
+                                  </button>
+                                </div>
+
+                                <span
+                                  className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                                    item.status === 'active'
+                                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                                      : item.status === 'disabled'
+                                      ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                                      : 'bg-slate-700 text-slate-300'
+                                  }`}
+                                >
+                                  {item.status}
+                                </span>
+                              </div>
+
+                              {/* Amount Display */}
+                              <div className="flex items-baseline justify-between">
+                                <div>
+                                  <span className="text-[10px] text-slate-400 block">Reward Amount</span>
+                                  <div className="text-xl font-black text-emerald-400">
+                                    UGX {item.amountUGX.toLocaleString()}
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <span className="text-[10px] text-slate-400 block">Redeemed</span>
+                                  <div className="text-xs font-mono font-bold text-white">
+                                    {item.usedCount || 0} / {item.maxUses ? item.maxUses : '∞'} users
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Usage Progress Bar */}
+                              {item.maxUses > 0 && (
+                                <div className="space-y-1">
+                                  <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                                    <div
+                                      className={`h-full rounded-full transition-all ${
+                                        pctUsed >= 100
+                                          ? 'bg-rose-500'
+                                          : pctUsed > 70
+                                          ? 'bg-amber-400'
+                                          : 'bg-gradient-to-r from-pink-500 to-emerald-400'
+                                      }`}
+                                      style={{ width: `${pctUsed}%` }}
+                                    />
+                                  </div>
+                                  <div className="flex justify-between text-[10px] text-slate-400 font-mono">
+                                    <span>{pctUsed}% claimed</span>
+                                    <span>{Math.max(0, item.maxUses - (item.usedCount || 0))} slots remaining</span>
+                                  </div>
+                                </div>
+                              )}
+
+                              {item.note && (
+                                <p className="text-[11px] text-slate-300 bg-slate-900/60 p-2 rounded-xl border border-slate-700/60">
+                                  💬 <span className="font-semibold">{item.note}</span>
+                                </p>
+                              )}
+                            </div>
+
+                            {/* Action Buttons */}
+                            <div className="pt-2 border-t border-slate-700/60 flex items-center justify-between gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setViewingGiftUsers(item)}
+                                className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-bold transition flex items-center gap-1"
+                              >
+                                <Users className="w-3.5 h-3.5 text-blue-400" />
+                                <span>Users ({item.usedByUserIds?.length || 0})</span>
+                              </button>
+
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleGiftStatus(item)}
+                                  className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition ${
+                                    item.status === 'active'
+                                      ? 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-500/30'
+                                      : 'bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border border-emerald-500/30'
+                                  }`}
+                                >
+                                  {item.status === 'active' ? 'Pause' : 'Activate'}
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => setGiftCodeToDelete(item)}
+                                  className="p-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white transition"
+                                  title="Delete Code"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* -------------------------------------------------------------
                 TAB 5: PLAN MANAGE (Editing Products, Images & Investments)
@@ -1907,6 +2614,392 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                   Save & Sync Balance in Firestore
                 </button>
               </form>
+
+              {/* Account Status / Ban & Unban Control */}
+              <div className="pt-3 border-t border-slate-700/80 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-400">Account Access:</span>
+                  <span
+                    className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
+                      editingUser.isBanned
+                        ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                        : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                    }`}
+                  >
+                    {editingUser.isBanned ? '🚫 Banned' : '✓ Active'}
+                  </span>
+                </div>
+                {editingUser.isBanned ? (
+                  <button
+                    type="button"
+                    onClick={() => handleUnbanUser(editingUser)}
+                    className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition active:scale-95 shadow-md"
+                  >
+                    <ShieldCheck className="w-4 h-4 stroke-[2.5]" />
+                    Unban This User Account
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBanPromptUser(editingUser);
+                      setBanReasonText('Suspended from admin control');
+                    }}
+                    className="w-full py-2.5 rounded-xl bg-rose-600/30 hover:bg-rose-600 text-rose-200 hover:text-white font-bold text-xs border border-rose-500/40 flex items-center justify-center gap-1.5 transition active:scale-95"
+                  >
+                    <Ban className="w-4 h-4" />
+                    Ban User Account
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* =========================================================================
+            MODAL: BAN CONFIRMATION & REASON
+           ========================================================================= */}
+        {banPromptUser && (
+          <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4">
+            <div className="bg-[#152a48] border border-rose-500/50 rounded-3xl max-w-sm w-full p-5 space-y-4 text-white shadow-2xl animate-in zoom-in-95">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-700">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center">
+                    <Ban className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-sm text-white">Ban User Account</h3>
+                    <p className="text-xs text-rose-300">{banPromptUser.phone || banPromptUser.displayName}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setBanPromptUser(null)}
+                  className="p-1 rounded-lg bg-slate-800 text-slate-400 hover:text-white"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="text-xs text-slate-300 space-y-1.5">
+                <p>
+                  Banning this account will block withdrawals, new investments, and bonus claims. The user will be notified of account suspension.
+                </p>
+                <div className="p-2.5 bg-slate-900/60 rounded-xl border border-slate-700/60 text-[11px] text-slate-400 space-y-0.5">
+                  <div>UID: <span className="font-mono text-slate-200">{banPromptUser.uid}</span></div>
+                  <div>Wallet Balance: <strong className="text-emerald-400">UGX {(banPromptUser.balanceUGX || 0).toLocaleString()}</strong></div>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-300 block mb-1">
+                  Reason for Suspension:
+                </label>
+                <input
+                  type="text"
+                  value={banReasonText}
+                  onChange={(e) => setBanReasonText(e.target.value)}
+                  placeholder="e.g. Violation of platform policy"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-rose-500"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setBanPromptUser(null)}
+                  className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleBanUser(banPromptUser, banReasonText)}
+                  className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-black text-xs shadow-md shadow-rose-600/30 transition flex items-center justify-center gap-1.5 active:scale-95"
+                >
+                  <Ban className="w-3.5 h-3.5" />
+                  Confirm Ban
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* =========================================================================
+            MODAL: CREATE NEW GIFT CODE / VOUCHER
+           ========================================================================= */}
+        {isNewGiftModalOpen && (
+          <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-3 sm:p-4 backdrop-blur-xs animate-in fade-in duration-150">
+            <div className="bg-[#152a48] border border-pink-500/40 rounded-3xl max-w-md w-full p-5 sm:p-6 space-y-4 text-white shadow-2xl max-h-[92vh] overflow-y-auto">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-700">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-pink-500/20 text-pink-400 flex items-center justify-center">
+                    <Gift className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-sm text-white">Create New Gift Code</h3>
+                    <p className="text-[11px] text-slate-400">Give users instant cash vouchers</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsNewGiftModalOpen(false)}
+                  className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white transition"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleCreateGiftCode} className="space-y-3.5">
+                {/* Code string with Auto-Generate Button */}
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-xs font-bold text-slate-300">Gift Code:</label>
+                    <button
+                      type="button"
+                      onClick={handleGenerateRandomCode}
+                      className="text-[11px] font-bold text-pink-400 hover:text-pink-300 flex items-center gap-1"
+                    >
+                      <Sparkles className="w-3 h-3" />
+                      <span>Random Code</span>
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    value={newGiftCode}
+                    onChange={(e) => setNewGiftCode(e.target.value.toUpperCase())}
+                    placeholder="e.g. ROYCO2026, BONUS5K"
+                    className="w-full px-3 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-mono font-black text-sm tracking-wider focus:outline-none focus:ring-2 focus:ring-pink-500 uppercase"
+                    required
+                  />
+                </div>
+
+                {/* Reward Amount UGX */}
+                <div>
+                  <label className="text-xs font-bold text-slate-300 block mb-1">
+                    Cash Reward Amount (UGX):
+                  </label>
+                  <input
+                    type="number"
+                    min="500"
+                    step="500"
+                    value={newGiftAmount === '' || newGiftAmount === 0 ? '' : newGiftAmount}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setNewGiftAmount(v === '' ? '' : Number(v));
+                    }}
+                    placeholder="Enter reward amount (e.g. 5000)"
+                    className="w-full px-3 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-emerald-400 font-extrabold text-base focus:outline-none focus:ring-2 focus:ring-pink-500"
+                    required
+                  />
+
+                  {/* Preset Quick Chips */}
+                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5 mt-2">
+                    {[2000, 5000, 10000, 25000, 50000, 100000].map((amt) => (
+                      <button
+                        type="button"
+                        key={amt}
+                        onClick={() => setNewGiftAmount(amt)}
+                        className={`py-1 px-1 rounded-lg text-[10px] font-bold border transition ${
+                          newGiftAmount === amt
+                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50'
+                            : 'bg-slate-900 text-slate-400 border-slate-700 hover:text-slate-200'
+                        }`}
+                      >
+                        {amt.toLocaleString()}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Maximum Redemptions Limit */}
+                <div>
+                  <label className="text-xs font-bold text-slate-300 block mb-1">
+                    Redemption Limit (Total Users):
+                  </label>
+                  <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5 mb-2">
+                    {[
+                      { label: '1 User', val: 1 },
+                      { label: '10 Users', val: 10 },
+                      { label: '50 Users', val: 50 },
+                      { label: '100 Users', val: 100 },
+                      { label: 'Unlimited', val: 99999 },
+                    ].map((opt) => (
+                      <button
+                        type="button"
+                        key={opt.val}
+                        onClick={() => setNewGiftMaxUses(opt.val)}
+                        className={`py-1.5 px-1 rounded-lg text-[10px] font-bold border transition ${
+                          newGiftMaxUses === opt.val
+                            ? 'bg-pink-500/20 text-pink-300 border-pink-500/50'
+                            : 'bg-slate-900 text-slate-400 border-slate-700 hover:text-slate-200'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    type="number"
+                    min="1"
+                    value={newGiftMaxUses === '' ? '' : newGiftMaxUses}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setNewGiftMaxUses(v === '' ? '' : Number(v));
+                    }}
+                    placeholder="Custom users limit (e.g. 50)"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white font-mono text-xs focus:outline-none focus:ring-2 focus:ring-pink-500"
+                    required
+                  />
+                  <span className="text-[10px] text-slate-400 block mt-1">
+                    Each user UID can only redeem each code once.
+                  </span>
+                </div>
+
+                {/* Note / Campaign */}
+                <div>
+                  <label className="text-xs font-bold text-slate-300 block mb-1">
+                    Description / Campaign Note (Optional):
+                  </label>
+                  <input
+                    type="text"
+                    value={newGiftNote}
+                    onChange={(e) => setNewGiftNote(e.target.value)}
+                    placeholder="e.g. Telegram Channel Giveaway, Launch Special"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:ring-2 focus:ring-pink-500"
+                  />
+                </div>
+
+                <div className="flex gap-2 pt-2 border-t border-slate-700">
+                  <button
+                    type="button"
+                    onClick={() => setIsNewGiftModalOpen(false)}
+                    className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmittingGift}
+                    className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-pink-600 to-rose-600 hover:brightness-110 text-white font-black text-xs shadow-md transition active:scale-95 flex items-center justify-center gap-1.5"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>{isSubmittingGift ? 'Saving...' : 'Save & Activate Code'}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* =========================================================================
+            MODAL: VIEW USERS WHO REDEEMED A GIFT CODE
+           ========================================================================= */}
+        {viewingGiftUsers && (
+          <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-3 sm:p-4 backdrop-blur-xs animate-in fade-in duration-150">
+            <div className="bg-[#152a48] border border-blue-500/40 rounded-3xl max-w-md w-full p-5 space-y-4 text-white shadow-2xl max-h-[85vh] flex flex-col">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-700 shrink-0">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center">
+                    <Users className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-sm text-white">Redemption Audit Trail</h3>
+                    <p className="text-[11px] text-pink-300 font-mono font-bold">
+                      Code: {viewingGiftUsers.code} (+UGX {viewingGiftUsers.amountUGX.toLocaleString()})
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setViewingGiftUsers(null)}
+                  className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+                {(!viewingGiftUsers.usedByUserIds || viewingGiftUsers.usedByUserIds.length === 0) ? (
+                  <div className="p-8 text-center text-slate-400 text-xs">
+                    No users have redeemed this gift code yet. Share the code with users to give them rewards!
+                  </div>
+                ) : (
+                  viewingGiftUsers.usedByUserIds.map((uid, idx) => {
+                    const matchedUser = allUsers.find((u) => u.uid === uid);
+                    return (
+                      <div
+                        key={uid + idx}
+                        className="p-2.5 bg-slate-900/80 rounded-xl border border-slate-700/60 flex items-center justify-between text-xs"
+                      >
+                        <div>
+                          <div className="font-bold text-white flex items-center gap-2">
+                            <span>{matchedUser?.displayName || 'Royco Member'}</span>
+                            {matchedUser?.phone && (
+                              <span className="text-[10px] text-blue-300 font-mono">
+                                ({matchedUser.phone})
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-mono truncate max-w-[200px]">
+                            UID: {uid}
+                          </div>
+                        </div>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-black bg-emerald-500/20 text-emerald-300">
+                          Redeemed
+                        </span>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              <div className="pt-2 border-t border-slate-700 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setViewingGiftUsers(null)}
+                  className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* =========================================================================
+            MODAL: CONFIRM GIFT CODE DELETION
+           ========================================================================= */}
+        {giftCodeToDelete && (
+          <div className="fixed inset-0 z-60 bg-black/80 flex items-center justify-center p-4 backdrop-blur-xs animate-in fade-in duration-150">
+            <div className="bg-[#152a48] border border-rose-500/50 rounded-3xl max-w-sm w-full p-5 space-y-4 text-white shadow-2xl">
+              <div className="flex items-center gap-3 text-rose-400">
+                <div className="p-2.5 rounded-2xl bg-rose-500/20 border border-rose-500/30">
+                  <Trash2 className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-black text-sm text-white">Delete Gift Code?</h3>
+                  <p className="text-[11px] text-slate-400">Remove from system</p>
+                </div>
+              </div>
+
+              <p className="text-xs text-slate-300 leading-relaxed">
+                Are you sure you want to delete gift code <strong className="text-pink-300 font-mono">{giftCodeToDelete.code}</strong> (value: UGX {giftCodeToDelete.amountUGX.toLocaleString()})? Users will no longer be able to claim this code.
+              </p>
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setGiftCodeToDelete(null)}
+                  className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteGiftCode(giftCodeToDelete)}
+                  className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-md transition active:scale-95"
+                >
+                  Yes, Delete Code
+                </button>
+              </div>
             </div>
           </div>
         )}

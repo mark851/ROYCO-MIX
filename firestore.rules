@@ -158,5 +158,12 @@ service cloud.firestore {
     match /settings/{settingId} {
       allow read, write: if true;
     }
+
+    // Gift codes collection for promotional vouchers & admin rewards
+    match /giftCodes/{codeId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isSignedIn();
+    }
   }
 }
+

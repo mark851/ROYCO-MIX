@@ -21,17 +21,17 @@ interface DepositModalProps {
   presetAmount?: number;
 }
 
-const PRESET_AMOUNTS = [10000, 25000, 35000, 50000, 100000, 250000, 500000];
+const PRESET_AMOUNTS = [25000, 35000, 50000, 100000, 250000, 500000];
 
 export const DepositModal: React.FC<DepositModalProps> = ({
   isOpen,
   onClose,
-  presetAmount = 25000,
+  presetAmount,
 }) => {
   const { profile, deposit } = useAuth();
   const { settings } = useProducts();
   const [selectedMethod, setSelectedMethod] = useState<'MTN Mobile Money' | 'Airtel Money'>('MTN Mobile Money');
-  const [amount, setAmount] = useState<number>(presetAmount);
+  const [amount, setAmount] = useState<number | ''>(presetAmount || '');
   const [phone, setPhone] = useState<string>(profile?.phone || '25677' + Math.floor(1000000 + Math.random() * 9000000));
   const [txRef, setTxRef] = useState<string>('');
   const [asPending, setAsPending] = useState(false);
@@ -49,12 +49,14 @@ export const DepositModal: React.FC<DepositModalProps> = ({
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const numAmount = typeof amount === 'number' ? amount : Number(amount) || 0;
+
   const handleRecharge = async (pendingMode: boolean) => {
-    if (amount <= 0) return;
+    if (numAmount <= 0) return;
 
     setSubmitting(true);
     try {
-      const ok = await deposit(amount, selectedMethod, phone, pendingMode, txRef || undefined);
+      const ok = await deposit(numAmount, selectedMethod, phone, pendingMode, txRef || undefined);
       if (ok) {
         setAsPending(pendingMode);
         setSuccess(true);
@@ -236,8 +238,12 @@ export const DepositModal: React.FC<DepositModalProps> = ({
                     type="number"
                     min="5000"
                     step="1000"
-                    value={amount}
-                    onChange={(e) => setAmount(Number(e.target.value))}
+                    value={amount === '' || amount === 0 ? '' : amount}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setAmount(v === '' ? '' : Number(v));
+                    }}
+                    placeholder="Enter amount"
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 text-slate-900 font-extrabold text-sm focus:outline-none focus:ring-2 focus:ring-[#1764c4]"
                   />
                 </div>
@@ -324,7 +330,7 @@ export const DepositModal: React.FC<DepositModalProps> = ({
                         2
                       </span>
                       <span>
-                        On the secure payment page, enter your Mobile Money phone number (<strong className="text-slate-900 font-semibold">{phone || '07...'}</strong>) and enter amount <strong className="text-emerald-700 font-bold">UGX {amount.toLocaleString()}</strong>.
+                        On the secure payment page, enter your Mobile Money phone number (<strong className="text-slate-900 font-semibold">{phone || '07...'}</strong>) and enter amount <strong className="text-emerald-700 font-bold">{numAmount > 0 ? `UGX ${numAmount.toLocaleString()}` : 'your chosen amount'}</strong>.
                       </span>
                     </li>
                     <li className="flex items-start gap-2">
@@ -365,17 +371,17 @@ export const DepositModal: React.FC<DepositModalProps> = ({
               <div className="space-y-2 pt-1">
                 <button
                   type="button"
-                  disabled={submitting || amount <= 0}
+                  disabled={submitting || numAmount <= 0}
                   onClick={() => handleRecharge(true)}
                   className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 via-amber-600 to-orange-500 text-white font-black text-xs shadow-md shadow-amber-500/25 hover:brightness-105 active:scale-95 transition flex items-center justify-center gap-1.5 disabled:opacity-50"
                 >
                   <Sparkles className="w-4 h-4" />
-                  {submitting ? 'Submitting Verification...' : `Submit Payment Verification (UGX ${amount.toLocaleString()})`}
+                  {submitting ? 'Submitting Verification...' : `Submit Payment Verification${numAmount > 0 ? ` (UGX ${numAmount.toLocaleString()})` : ''}`}
                 </button>
 
                 <button
                   type="button"
-                  disabled={submitting || amount <= 0}
+                  disabled={submitting || numAmount <= 0}
                   onClick={() => handleRecharge(false)}
                   className="w-full py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] transition active:scale-95 flex items-center justify-center gap-1 disabled:opacity-50"
                 >

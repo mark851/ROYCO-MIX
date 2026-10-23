@@ -17,12 +17,14 @@ import {
   Copy,
   Check,
   AlertTriangle,
+  Gift,
 } from 'lucide-react';
 
 interface MineViewProps {
   onDepositClick: () => void;
   onWithdrawClick: () => void;
   onOrderClick: () => void;
+  onBonusClick?: () => void;
   onSupportClick: () => void;
   onAuthModalClick: () => void;
   onOpenAdmin: () => void;
@@ -32,12 +34,14 @@ export const MineView: React.FC<MineViewProps> = ({
   onDepositClick,
   onWithdrawClick,
   onOrderClick,
+  onBonusClick,
   onSupportClick,
   onAuthModalClick,
   onOpenAdmin,
 }) => {
   const {
     user,
+
     profile,
     transactions,
     signOut,
@@ -257,6 +261,33 @@ export const MineView: React.FC<MineViewProps> = ({
           <span className="text-[10px] text-slate-400">Fast payout</span>
         </button>
       </div>
+
+      {/* Gift Code Voucher Redemption Banner */}
+      {onBonusClick && (
+        <button
+          type="button"
+          onClick={onBonusClick}
+          className="w-full p-3.5 rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border border-pink-500/30 text-white flex items-center justify-between shadow-md active:scale-98 transition group"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-pink-500 to-rose-600 flex items-center justify-center text-white shadow-md shadow-pink-500/30 shrink-0 group-hover:scale-105 transition-transform">
+              <Gift className="w-5 h-5" />
+            </div>
+            <div className="text-left">
+              <div className="text-xs font-black flex items-center gap-1.5">
+                <span>Redeem Gift Code</span>
+                <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-pink-500 text-white uppercase">
+                  Vouchers
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-300">
+                Claim promotional cash vouchers credited to your wallet
+              </p>
+            </div>
+          </div>
+          <ChevronRight className="w-4 h-4 text-pink-400 group-hover:translate-x-0.5 transition-transform" />
+        </button>
+      )}
 
       {/* 3. Mobile Money Bound Account Card */}
       <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs space-y-3">

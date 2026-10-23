@@ -88,8 +88,23 @@ export interface FinancialTransaction {
 export interface BonusRecord {
   id: string;
   userId: string;
-  claimType: 'daily_checkin' | 'wheel_spin' | 'invite_milestone';
+  claimType: 'daily_checkin' | 'wheel_spin' | 'gift_code' | 'invite_milestone';
   rewardUGX: number;
   claimDate: string;
   createdAt: string;
+  code?: string;
 }
+
+export interface GiftCode {
+  id: string;
+  code: string;
+  amountUGX: number;
+  maxUses: number;
+  usedCount: number;
+  usedByUserIds: string[];
+  status: 'active' | 'disabled' | 'expired';
+  note?: string;
+  createdAt: string;
+  createdBy?: string;
+}
+
