@@ -18,7 +18,12 @@ import {
   Check,
   AlertTriangle,
   Gift,
+  Sun,
+  Moon,
+  Palette,
 } from 'lucide-react';
+import { useTheme } from '../context/ThemeContext';
+
 
 interface MineViewProps {
   onDepositClick: () => void;
@@ -49,6 +54,7 @@ export const MineView: React.FC<MineViewProps> = ({
     isAdmin,
     verifyOwnerAdmin,
   } = useAuth();
+  const { themeMode, isDark, setThemeMode, colorConfig } = useTheme();
   const [editingMoMo, setEditingMoMo] = useState(false);
   const [momoNumber, setMomoNumber] = useState(profile?.momoNumber || profile?.phone || '');
   const [momoProvider, setMomoProvider] = useState(profile?.momoProvider || 'MTN Mobile Money');
@@ -468,8 +474,83 @@ export const MineView: React.FC<MineViewProps> = ({
         </button>
       )}
 
+      {/* 5b. Appearance & Theme Selection Card */}
+      <div className="bg-white dark:bg-[#0f1c2e] rounded-2xl p-4 border border-slate-200 dark:border-slate-800/80 shadow-xs space-y-3 transition-colors">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-amber-300 flex items-center justify-center">
+              <Palette className="w-4 h-4" />
+            </div>
+            <div>
+              <h4 className="font-extrabold text-sm text-slate-900 dark:text-white">Theme & Display Mode</h4>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400">Choose your preferred viewing style</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] font-bold text-slate-700 dark:text-slate-300">
+            <span
+              className="w-2.5 h-2.5 rounded-full inline-block"
+              style={{ backgroundColor: colorConfig.primaryHex }}
+            />
+            <span>{colorConfig.name}</span>
+          </div>
+        </div>
+
+        {/* Light vs Dark Mode Selection Buttons */}
+        <div className="grid grid-cols-2 gap-2.5 pt-1">
+          <button
+            type="button"
+            onClick={() => setThemeMode('light')}
+            className={`p-3 rounded-2xl border text-left flex flex-col justify-between transition-all active:scale-95 ${
+              themeMode === 'light'
+                ? 'border-blue-500 bg-blue-50/70 text-slate-900 ring-2 ring-blue-400/40 shadow-xs'
+                : 'border-slate-200 dark:border-slate-700/80 bg-slate-50/50 dark:bg-slate-850 text-slate-600 dark:text-slate-400 hover:border-slate-300'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center shadow-xs">
+                <Sun className="w-4 h-4 stroke-[2.5]" />
+              </div>
+              {themeMode === 'light' && (
+                <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[11px] font-black">
+                  ✓
+                </span>
+              )}
+            </div>
+            <div>
+              <div className="text-xs font-black text-slate-900 dark:text-white">Light Theme</div>
+              <div className="text-[10px] text-slate-500 dark:text-slate-400">Crisp white daylight display</div>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setThemeMode('dark')}
+            className={`p-3 rounded-2xl border text-left flex flex-col justify-between transition-all active:scale-95 ${
+              themeMode === 'dark'
+                ? 'border-indigo-500 bg-indigo-950/60 text-white ring-2 ring-indigo-400/50 shadow-md shadow-indigo-950/50'
+                : 'border-slate-200 dark:border-slate-700/80 bg-slate-50/50 dark:bg-slate-850 text-slate-600 dark:text-slate-400 hover:border-slate-300'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="w-8 h-8 rounded-xl bg-indigo-900/80 text-amber-300 flex items-center justify-center shadow-xs">
+                <Moon className="w-4 h-4 stroke-[2.5]" />
+              </div>
+              {themeMode === 'dark' && (
+                <span className="w-5 h-5 rounded-full bg-indigo-500 text-white flex items-center justify-center text-[11px] font-black">
+                  ✓
+                </span>
+              )}
+            </div>
+            <div>
+              <div className="text-xs font-black text-slate-900 dark:text-white">Dark Theme</div>
+              <div className="text-[10px] text-slate-500 dark:text-slate-400">Sleek midnight dark navy</div>
+            </div>
+          </button>
+        </div>
+      </div>
+
       {/* 6. Support & Security links */}
-      <div className="bg-white rounded-2xl overflow-hidden border border-slate-200 shadow-xs divide-y divide-slate-100">
+      <div className="bg-white dark:bg-[#0f1c2e] rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-xs divide-y divide-slate-100 dark:divide-slate-800 transition-colors">
         <button
           onClick={onSupportClick}
           className="w-full p-3.5 flex items-center justify-between text-xs text-slate-800 hover:bg-slate-50 transition"

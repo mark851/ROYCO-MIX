@@ -76,9 +76,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
         {/* Header */}
         <div className="bg-gradient-to-r from-[#1764c4] via-[#1d70d6] to-[#1452a0] p-4 text-white flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center font-black text-lg">
-              RM
-            </div>
+            <img
+              src="/assets/aistudio/file_00000000784c81f4b55dedd74b2223f9_6a04b5cc.png"
+              alt="Royco Mix"
+              className="w-9 h-9 rounded-xl object-cover border border-amber-300/40 shadow-sm shrink-0"
+            />
             <div>
               <h3 className="font-extrabold text-base leading-tight">ROYCO MIX</h3>
               <p className="text-[11px] text-blue-100">

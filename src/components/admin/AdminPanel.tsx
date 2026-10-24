@@ -57,10 +57,14 @@ import {
   ShieldAlert,
   Gift,
   Ticket,
+  Palette,
+  Sun,
+  Moon,
+  Laptop,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { ImageUploadManager } from './ImageUploadManager';
-import { BannerSlide, DEFAULT_BANNERS } from '../../context/ProductsContext';
+import { BannerSlide, DEFAULT_BANNERS, ThemeColorOption, DefaultThemeMode } from '../../context/ProductsContext';
 
 interface AdminPanelProps {
   isOpen: boolean;
@@ -78,7 +82,8 @@ type AdminTab =
   | 'banners_media'
   | 'payment_gateways'
   | 'support'
-  | 'settings';
+  | 'settings'
+  | 'theme_colors';
 
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
@@ -122,6 +127,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
   const [whatsappLink, setWhatsappLink] = useState(settings.whatsapp || '+256770000000');
   const [telegramLink, setTelegramLink] = useState(settings.telegram || 'https://t.me/roycomix_ug');
   const [trialBonusUGX, setTrialBonusUGX] = useState(settings.trialBonusUGX || 3000);
+  const [selectedThemeColor, setSelectedThemeColor] = useState<ThemeColorOption>(
+    settings.themeColor || 'blue'
+  );
+  const [selectedDefaultMode, setSelectedDefaultMode] = useState<DefaultThemeMode>(
+    settings.defaultThemeMode || 'system'
+  );
 
   // Sync settings when updated
   useEffect(() => {
@@ -131,6 +142,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
       setWhatsappLink(settings.whatsapp);
       setTelegramLink(settings.telegram);
       setTrialBonusUGX(settings.trialBonusUGX);
+      if (settings.themeColor) setSelectedThemeColor(settings.themeColor);
+      if (settings.defaultThemeMode) setSelectedDefaultMode(settings.defaultThemeMode);
     }
   }, [settings]);
 
@@ -748,9 +761,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
           {/* Sidebar Top: Logo & Close Button */}
           <div className="p-4 border-b border-white/10 flex items-center justify-between">
             <div className="flex items-center gap-2.5 overflow-hidden">
-              <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center font-black text-white text-base shadow-inner shrink-0">
-                RM
-              </div>
+              <img
+                src="/assets/aistudio/file_00000000784c81f4b55dedd74b2223f9_6a04b5cc.png"
+                alt="Royco Admin"
+                className="w-10 h-10 rounded-xl object-cover shadow-sm shrink-0 border border-white/20"
+              />
               {sidebarOpen && (
                 <div className="truncate">
                   <h2 className="font-black text-sm tracking-wide text-white">ROYCO ADMIN</h2>
@@ -961,6 +976,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
             >
               <Settings className="w-4 h-4 shrink-0" />
               {sidebarOpen && <span>General Setting</span>}
+            </button>
+
+            {/* 10. Theme & Brand Colors */}
+            <button
+              onClick={() => setCurrentTab('theme_colors')}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition ${
+                currentTab === 'theme_colors'
+                  ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold'
+                  : 'text-blue-100 hover:bg-white/10'
+              }`}
+            >
+              <Palette className="w-4 h-4 shrink-0 text-pink-300" />
+              {sidebarOpen && <span>Theme & Colors</span>}
             </button>
           </nav>
 
@@ -2522,6 +2550,313 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                     Save System Settings
                   </button>
                 </div>
+              </div>
+            )}
+
+            {/* -------------------------------------------------------------
+                TAB 10: THEME & BRAND COLORS
+               ------------------------------------------------------------- */}
+            {currentTab === 'theme_colors' && (
+              <div className="space-y-6 max-w-2xl">
+                <div>
+                  <div className="flex items-center gap-2 text-pink-400 mb-1">
+                    <Palette className="w-5 h-5" />
+                    <span className="text-xs font-black uppercase tracking-wider">Appearance Control</span>
+                  </div>
+                  <h3 className="text-lg font-black text-white">Platform Color Scheme & Default Theme</h3>
+                  <p className="text-xs text-slate-400">
+                    Set the primary brand color palette and default appearance mode for all user interfaces across the platform.
+                  </p>
+                </div>
+
+                {/* 1. Master Brand Color Selector */}
+                <div className="bg-[#152a48] border border-slate-700/80 rounded-3xl p-5 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-extrabold text-sm text-white">Brand Color Palette</h4>
+                      <p className="text-[11px] text-slate-400">Select the accent color displayed to all users</p>
+                    </div>
+                    <span className="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-white/10 text-slate-300 border border-white/10">
+                      Active: {selectedThemeColor.toUpperCase()}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {[
+                      {
+                        id: 'blue' as ThemeColorOption,
+                        name: 'Royco Blue',
+                        desc: 'Classic original brand',
+                        hex: '#1764c4',
+                        gradient: 'from-[#1764c4] to-[#0c3d7c]',
+                        ring: 'ring-blue-500',
+                      },
+                      {
+                        id: 'emerald' as ThemeColorOption,
+                        name: 'Emerald Mint',
+                        desc: 'Agri-yield & growth',
+                        hex: '#059669',
+                        gradient: 'from-emerald-600 to-teal-800',
+                        ring: 'ring-emerald-500',
+                      },
+                      {
+                        id: 'purple' as ThemeColorOption,
+                        name: 'Royal Purple',
+                        desc: 'High-tier VIP prestige',
+                        hex: '#7c3aed',
+                        gradient: 'from-purple-600 to-indigo-800',
+                        ring: 'ring-purple-500',
+                      },
+                      {
+                        id: 'amber' as ThemeColorOption,
+                        name: 'Harvest Gold',
+                        desc: 'Warm sunshine amber',
+                        hex: '#d97706',
+                        gradient: 'from-amber-600 to-orange-800',
+                        ring: 'ring-amber-500',
+                      },
+                      {
+                        id: 'rose' as ThemeColorOption,
+                        name: 'Ruby Rose',
+                        desc: 'High-energy crimson',
+                        hex: '#e11d48',
+                        gradient: 'from-rose-600 to-pink-800',
+                        ring: 'ring-rose-500',
+                      },
+                      {
+                        id: 'cyan' as ThemeColorOption,
+                        name: 'Electric Cyan',
+                        desc: 'Modern turquoise fintech',
+                        hex: '#0891b2',
+                        gradient: 'from-cyan-600 to-blue-800',
+                        ring: 'ring-cyan-500',
+                      },
+                    ].map((palette) => {
+                      const isSelected = selectedThemeColor === palette.id;
+                      return (
+                        <button
+                          key={palette.id}
+                          type="button"
+                          onClick={() => setSelectedThemeColor(palette.id)}
+                          className={`p-3.5 rounded-2xl text-left border transition-all duration-200 relative overflow-hidden group ${
+                            isSelected
+                              ? `bg-slate-900 border-white/40 ring-2 ${palette.ring} shadow-lg shadow-black/40`
+                              : 'bg-slate-900/60 border-slate-700/60 hover:bg-slate-900/90 hover:border-slate-600'
+                          }`}
+                        >
+                          {/* Accent Gradient Band */}
+                          <div
+                            className={`h-2.5 rounded-full bg-gradient-to-r ${palette.gradient} mb-2.5 w-full shadow-xs`}
+                          />
+
+                          <div className="flex items-center justify-between mb-0.5">
+                            <span className="font-extrabold text-xs text-white group-hover:text-white">
+                              {palette.name}
+                            </span>
+                            {isSelected && (
+                              <span className="w-4 h-4 rounded-full bg-white text-slate-900 flex items-center justify-center text-[10px] font-black">
+                                ✓
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-slate-400 line-clamp-1">{palette.desc}</p>
+                          <div className="mt-2 text-[9px] font-mono font-bold text-slate-500 flex items-center gap-1">
+                            <span
+                              className="w-2 h-2 rounded-full inline-block shrink-0"
+                              style={{ backgroundColor: palette.hex }}
+                            />
+                            <span>{palette.hex}</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 2. Platform Default Mode (Light vs Dark) */}
+                <div className="bg-[#152a48] border border-slate-700/80 rounded-3xl p-5 space-y-4">
+                  <div>
+                    <h4 className="font-extrabold text-sm text-white">Default Theme Mode for Users</h4>
+                    <p className="text-[11px] text-slate-400">
+                      Choose what appearance new visitors and unregistered users see first (users can switch anytime).
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {[
+                      {
+                        id: 'system' as DefaultThemeMode,
+                        label: 'Auto / System',
+                        desc: 'Matches user phone OS setting',
+                        icon: Laptop,
+                      },
+                      {
+                        id: 'light' as DefaultThemeMode,
+                        label: 'Light Theme',
+                        desc: 'Crisp bright white & clean slate',
+                        icon: Sun,
+                      },
+                      {
+                        id: 'dark' as DefaultThemeMode,
+                        label: 'Dark Theme',
+                        desc: 'Deep navy night mode contrast',
+                        icon: Moon,
+                      },
+                    ].map((mode) => {
+                      const isSelected = selectedDefaultMode === mode.id;
+                      const Icon = mode.icon;
+                      return (
+                        <button
+                          key={mode.id}
+                          type="button"
+                          onClick={() => setSelectedDefaultMode(mode.id)}
+                          className={`p-3.5 rounded-2xl text-left border transition-all duration-200 flex flex-col justify-between ${
+                            isSelected
+                              ? 'bg-slate-900 border-indigo-400 ring-2 ring-indigo-500/50 shadow-md'
+                              : 'bg-slate-900/60 border-slate-700/60 hover:bg-slate-900/90 hover:border-slate-600'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <div
+                              className={`p-2 rounded-xl ${
+                                isSelected ? 'bg-indigo-500/20 text-indigo-300' : 'bg-slate-800 text-slate-400'
+                              }`}
+                            >
+                              <Icon className="w-4 h-4" />
+                            </div>
+                            {isSelected && (
+                              <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-indigo-500 text-white">
+                                Selected
+                              </span>
+                            )}
+                          </div>
+                          <div>
+                            <div className="font-extrabold text-xs text-white mb-0.5">{mode.label}</div>
+                            <div className="text-[10px] text-slate-400">{mode.desc}</div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 3. Live Preview Card */}
+                <div className="bg-[#152a48] border border-slate-700/80 rounded-3xl p-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black uppercase tracking-wider text-slate-400">
+                      Live User Interface Preview
+                    </span>
+                    <span className="text-[11px] text-emerald-400 font-bold">Interactive Preview</span>
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-[#0b1626] border border-slate-800 text-slate-100 space-y-3">
+                    {/* Simulated Mini Header */}
+                    <div className="p-3 rounded-xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-slate-700 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <img
+                          src="/assets/aistudio/file_00000000784c81f4b55dedd74b2223f9_6a04b5cc.png"
+                          alt="Royco Logo"
+                          className="w-8 h-8 rounded-lg object-cover shadow-xs border border-white/20 shrink-0"
+                        />
+                        <div>
+                          <div className="font-black text-xs text-white">ROYCO MIX INVESTMENT</div>
+                          <div className="text-[9px] text-slate-400">UGX Wallet: 250,000</div>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="px-2.5 py-1 rounded-lg text-[10px] font-black text-white shadow-xs"
+                        style={{
+                          backgroundColor:
+                            selectedThemeColor === 'emerald'
+                              ? '#059669'
+                              : selectedThemeColor === 'purple'
+                              ? '#7c3aed'
+                              : selectedThemeColor === 'amber'
+                              ? '#d97706'
+                              : selectedThemeColor === 'rose'
+                              ? '#e11d48'
+                              : selectedThemeColor === 'cyan'
+                              ? '#0891b2'
+                              : '#1764c4',
+                        }}
+                      >
+                        + Deposit
+                      </button>
+                    </div>
+
+                    {/* Simulated Product Mini Card */}
+                    <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center justify-between">
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <span
+                            className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase text-white"
+                            style={{
+                              backgroundColor:
+                                selectedThemeColor === 'emerald'
+                                  ? '#059669'
+                                  : selectedThemeColor === 'purple'
+                                  ? '#7c3aed'
+                                  : selectedThemeColor === 'amber'
+                                  ? '#d97706'
+                                  : selectedThemeColor === 'rose'
+                                  ? '#e11d48'
+                                  : selectedThemeColor === 'cyan'
+                                  ? '#0891b2'
+                                  : '#1764c4',
+                            }}
+                          >
+                            VIP Hot
+                          </span>
+                          <span className="font-bold text-xs text-white">ROYCO AROMA UNIT</span>
+                        </div>
+                        <div className="text-[10px] text-slate-400">Share: UGX 100,000 • Yield: 6,000/day</div>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="px-3 py-1.5 rounded-xl text-xs font-black text-white shadow-xs"
+                        style={{
+                          backgroundColor:
+                            selectedThemeColor === 'emerald'
+                              ? '#059669'
+                              : selectedThemeColor === 'purple'
+                              ? '#7c3aed'
+                              : selectedThemeColor === 'amber'
+                              ? '#d97706'
+                              : selectedThemeColor === 'rose'
+                              ? '#e11d48'
+                              : selectedThemeColor === 'cyan'
+                              ? '#0891b2'
+                              : '#1764c4',
+                        }}
+                      >
+                        Invest
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Save Button */}
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await updateSettings({
+                      themeColor: selectedThemeColor,
+                      defaultThemeMode: selectedDefaultMode,
+                    });
+                    confetti({ particleCount: 50, spread: 60 });
+                    showNotification(
+                      'success',
+                      `Theme palette updated to ${selectedThemeColor.toUpperCase()} & default mode to ${selectedDefaultMode.toUpperCase()}!`
+                    );
+                  }}
+                  className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-pink-600 via-purple-600 to-indigo-600 hover:brightness-110 text-white font-black text-xs shadow-xl shadow-purple-600/30 transition flex items-center justify-center gap-2 active:scale-95"
+                >
+                  <Palette className="w-4 h-4" />
+                  <span>Save Theme & Apply To All Platform Users</span>
+                </button>
               </div>
             )}
           </div>

@@ -23,6 +23,7 @@ import { MineView } from './components/MineView';
 import { AdminPanel } from './components/admin/AdminPanel';
 import { BannerCarousel } from './components/home/BannerCarousel';
 import { ProductsProvider, useProducts } from './context/ProductsContext';
+import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { InvestmentProduct } from './types';
 import { TrendingUp, Sparkles, ShieldCheck, CheckCircle } from 'lucide-react';
 
@@ -31,6 +32,7 @@ const CATEGORIES = ['All', 'New User Trial', 'Micro Equipment', 'Processing Unit
 function MainApp() {
   const { user, profile, activeInvestments, isAdmin } = useAuth();
   const { products } = useProducts();
+  const { colorConfig } = useTheme();
   const [currentTab, setCurrentTab] = useState<NavTab>('home');
   const [selectedCategory, setSelectedCategory] = useState('All');
 
@@ -73,9 +75,9 @@ function MainApp() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 flex justify-center font-sans text-slate-800 antialiased selection:bg-[#1764c4] selection:text-white">
+    <div className="min-h-screen bg-slate-100 dark:bg-[#070e18] flex justify-center font-sans text-slate-800 dark:text-slate-100 antialiased selection:bg-[#1764c4] selection:text-white transition-colors duration-200">
       {/* Mobile-centric container with max-w-md matching the screenshot phone interface */}
-      <div className="w-full max-w-md bg-white min-h-screen shadow-xl relative flex flex-col border-x border-slate-200">
+      <div className="w-full max-w-md bg-white dark:bg-[#0b1626] min-h-screen shadow-xl relative flex flex-col border-x border-slate-200 dark:border-slate-800 transition-colors duration-200">
         {/* Header */}
         <Header
           onDepositClick={() => {
@@ -118,13 +120,15 @@ function MainApp() {
             {/* Section Heading: "Company Or Stocks" with gradient accent line from screenshot */}
             <div className="px-4 mt-3 mb-2 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <h2 className="text-[17px] font-black text-slate-900 tracking-tight">
+                <h2 className="text-[17px] font-black text-slate-900 dark:text-white tracking-tight">
                   Company Or Stocks
                 </h2>
                 {/* Horizontal progress gradient accent bar as seen in screenshot */}
-                <div className="w-24 h-1.5 rounded-full bg-gradient-to-r from-[#1764c4] to-blue-200" />
+                <div
+                  className={`w-24 h-1.5 rounded-full bg-gradient-to-r ${colorConfig.gradientHeader} opacity-80`}
+                />
               </div>
-              <span className="text-[11px] font-bold text-[#1764c4] bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
+              <span className={`text-[11px] font-bold ${colorConfig.badgeBg} ${colorConfig.textAccent} px-2 py-0.5 rounded-full border border-current/20`}>
                 50-Day Cycles
               </span>
             </div>
@@ -135,10 +139,13 @@ function MainApp() {
                 <button
                   key={cat}
                   onClick={() => setSelectedCategory(cat)}
+                  style={{
+                    backgroundColor: selectedCategory === cat ? colorConfig.primaryHex : undefined,
+                  }}
                   className={`px-3 py-1 rounded-full text-xs font-bold transition whitespace-nowrap active:scale-95 ${
                     selectedCategory === cat
-                      ? 'bg-[#1764c4] text-white shadow-xs'
-                      : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                      ? 'text-white shadow-xs'
+                      : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800/80 dark:hover:bg-slate-750 dark:text-slate-300 text-slate-600'
                   }`}
                 >
                   {cat}
@@ -347,7 +354,9 @@ export default function App() {
   return (
     <AuthProvider>
       <ProductsProvider>
-        <MainApp />
+        <ThemeProvider>
+          <MainApp />
+        </ThemeProvider>
       </ProductsProvider>
     </AuthProvider>
   );

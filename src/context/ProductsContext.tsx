@@ -13,6 +13,9 @@ export interface BannerSlide {
   linkTab?: string;
 }
 
+export type ThemeColorOption = 'blue' | 'emerald' | 'purple' | 'amber' | 'rose' | 'cyan';
+export type DefaultThemeMode = 'light' | 'dark' | 'system';
+
 export interface PlatformSettings {
   paymentLink: string;
   withdrawLink: string;
@@ -24,6 +27,8 @@ export interface PlatformSettings {
   mtnUssd?: string;
   banners?: BannerSlide[];
   recentImages?: string[];
+  themeColor?: ThemeColorOption;
+  defaultThemeMode?: DefaultThemeMode;
 }
 
 export const DEFAULT_BANNERS: BannerSlide[] = [
@@ -57,6 +62,8 @@ const DEFAULT_SETTINGS: PlatformSettings = {
   whatsapp: '+256770000000',
   telegram: 'https://t.me/roycomix_ug',
   banners: DEFAULT_BANNERS,
+  themeColor: 'blue',
+  defaultThemeMode: 'light',
   recentImages: [
     'https://images.unsplash.com/photo-1532336414038-cf19250c5757?auto=format&fit=crop&w=600&q=80',
     'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&w=600&q=80',
