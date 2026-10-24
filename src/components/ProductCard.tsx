@@ -101,7 +101,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           <div className="flex items-baseline gap-1">
             <span className="text-xs text-slate-600 dark:text-slate-400 font-medium">Share Value:</span>
             <span className={`${colorConfig.textAccent} font-black text-sm md:text-base`}>
-              UGX {product.shareValueUGX.toLocaleString()}.00
+              UGX {product.shareValueUGX.toLocaleString()}
             </span>
           </div>
 
